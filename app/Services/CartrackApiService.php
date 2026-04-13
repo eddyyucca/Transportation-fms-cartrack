@@ -29,6 +29,7 @@ class CartrackApiService
 
         do {
             $response = Http::timeout($timeout)
+                ->withoutVerifying()
                 ->acceptJson()
                 ->withBasicAuth($username, $password)
                 ->get($baseUrl . '/rest/trips', [
@@ -67,52 +68,64 @@ class CartrackApiService
 
             if (!isset($report[$registration])) {
                 $report[$registration] = [
-                    'registration' => $registration,
-                    'total_trips' => 0,
-                    'distance_km' => 0,
+                    'registration'        => $registration,
+                    'total_trips'         => 0,
+                    'distance_km'         => 0,
                     'total_engine_on_min' => 0,
-                    'total_driving_min' => 0,
-                    'total_idle_min' => 0,
-                    'harsh_acceleration' => 0,
-                    'harsh_braking' => 0,
-                    'harsh_cornering' => 0,
-                    'threshold_speeding' => 0,
-                    'road_speeding' => 0,
-                    'total_harsh_events' => 0,
+                    'total_driving_min'   => 0,
+                    'total_idle_min'      => 0,
+                    'harsh_acceleration'  => 0,
+                    'harsh_braking'       => 0,
+                    'harsh_cornering'     => 0,
+                    'threshold_speeding'  => 0,
+                    'road_speeding'       => 0,
+                    'total_harsh_events'  => 0,
                     'total_speeding_events' => 0,
-                    'idle_ratio' => 0,
-                    'utilization_ratio' => 0,
-                    'pa_score' => 0,
-                    'safety_score' => 100,
-                    'performance_score' => 0,
-                    'status' => 'Good',
+                    'fuel_consumption'    => 0,
+                    'idle_ratio'          => 0,
+                    'utilization_ratio'   => 0,
+                    'pa_score'            => 0,
+                    'safety_score'        => 100,
+                    'performance_score'   => 0,
+                    'status'              => 'Good',
                 ];
             }
 
             $tripDuration = (int) ($trip['trip_duration_seconds'] ?? 0);
-            $idleTime = (int) ($trip['idle_time_seconds'] ?? 0);
-            $drivingMin = max(0, ($tripDuration - $idleTime) / 60);
-            $engineOnMin = $tripDuration / 60;
-            $idleMin = $idleTime / 60;
+            $idleTime     = (int) ($trip['idle_time_seconds'] ?? 0);
+            $drivingMin   = max(0, ($tripDuration - $idleTime) / 60);
+            $engineOnMin  = $tripDuration / 60;
+            $idleMin      = $idleTime / 60;
+
+            // Fuel: coba berbagai nama field yang mungkin dari Cartrack
+            $tripFuel = (float) (
+                $trip['fuel_consumption']       ??
+                $trip['fuel_used']              ??
+                $trip['trip_fuel_consumption']  ??
+                $trip['fuel_cost_liters']       ??
+                0
+            );
 
             $report[$registration]['total_trips']++;
-            $report[$registration]['distance_km'] += (float) ($trip['trip_distance'] ?? 0) / 1000;
+            $report[$registration]['distance_km']         += (float) ($trip['trip_distance'] ?? 0) / 1000;
             $report[$registration]['total_engine_on_min'] += $engineOnMin;
-            $report[$registration]['total_driving_min'] += $drivingMin;
-            $report[$registration]['total_idle_min'] += $idleMin;
-            $report[$registration]['harsh_acceleration'] += (int) ($trip['harsh_acceleration_events'] ?? 0);
-            $report[$registration]['harsh_braking'] += (int) ($trip['harsh_braking_events'] ?? 0);
-            $report[$registration]['harsh_cornering'] += (int) ($trip['harsh_cornering_events'] ?? 0);
-            $report[$registration]['threshold_speeding'] += (int) ($trip['thresholds_speeding_events'] ?? 0);
-            $report[$registration]['road_speeding'] += (int) ($trip['road_speeding_events'] ?? 0);
+            $report[$registration]['total_driving_min']   += $drivingMin;
+            $report[$registration]['total_idle_min']      += $idleMin;
+            $report[$registration]['harsh_acceleration']  += (int) ($trip['harsh_acceleration_events'] ?? 0);
+            $report[$registration]['harsh_braking']       += (int) ($trip['harsh_braking_events'] ?? 0);
+            $report[$registration]['harsh_cornering']     += (int) ($trip['harsh_cornering_events'] ?? 0);
+            $report[$registration]['threshold_speeding']  += (int) ($trip['thresholds_speeding_events'] ?? 0);
+            $report[$registration]['road_speeding']       += (int) ($trip['road_speeding_events'] ?? 0);
+            $report[$registration]['fuel_consumption']    += $tripFuel;
         }
 
         foreach ($report as &$row) {
-            $row['distance_km'] = round($row['distance_km'], 2);
+            $row['distance_km']         = round($row['distance_km'], 2);
             $row['total_engine_on_min'] = round($row['total_engine_on_min'], 2);
-            $row['total_driving_min'] = round($row['total_driving_min'], 2);
-            $row['total_idle_min'] = round($row['total_idle_min'], 2);
-            $row['total_harsh_events'] = $row['harsh_acceleration'] + $row['harsh_braking'] + $row['harsh_cornering'];
+            $row['total_driving_min']   = round($row['total_driving_min'], 2);
+            $row['total_idle_min']      = round($row['total_idle_min'], 2);
+            $row['fuel_consumption']    = round($row['fuel_consumption'], 2);
+            $row['total_harsh_events']  = $row['harsh_acceleration'] + $row['harsh_braking'] + $row['harsh_cornering'];
             $row['total_speeding_events'] = $row['threshold_speeding'] + $row['road_speeding'];
 
             $row['idle_ratio'] = $row['total_engine_on_min'] > 0
@@ -180,66 +193,140 @@ class CartrackApiService
         return $summary;
     }
 
-    public function syncDailyMetrics(string $date): array
-{
-    // Ambil data dari API
-    $payload = $this->fetchTripsByDate($date);
-    $trips   = $payload['trips'];
+    public function fetchFuelByRegistration(string $registration, string $date): float
+    {
+        $start   = Carbon::parse($date)->format('Y-m-d') . ' 00:00:00';
+        $end     = Carbon::parse($date)->format('Y-m-d') . ' 23:59:59';
+        $baseUrl = rtrim(config('cartrack.base_url'), '/');
+        $timeout = (int) config('cartrack.timeout', 90);
+        $auth    = [config('cartrack.username'), config('cartrack.password')];
+        $reg     = urlencode($registration);
 
-    if (empty($trips)) {
-        return ['synced' => 0, 'skipped' => 0, 'message' => 'Tidak ada trip data.'];
+        try {
+            // Endpoint 1: /rest/fuel/level/:registration
+            // Response: {"data":{"start_period":{"liters":X},"end_period":{"liters":Y},"estimated_fuel_used":Z}}
+            $response = Http::timeout($timeout)
+                ->withoutVerifying()
+                ->acceptJson()
+                ->withBasicAuth(...$auth)
+                ->get("{$baseUrl}/rest/fuel/level/{$reg}", [
+                    'start_timestamp' => $start,
+                    'end_timestamp'   => $end,
+                ]);
+
+            if ($response->successful()) {
+                $data = $response->json('data') ?? [];
+                $fuel = (float) ($data['estimated_fuel_used'] ?? 0);
+                if ($fuel > 0) return round($fuel, 2);
+
+                // Fallback: selisih level awal - akhir
+                $startL = (float) ($data['start_period']['liters'] ?? 0);
+                $endL   = (float) ($data['end_period']['liters']   ?? 0);
+                if ($startL > 0 && $startL > $endL) return round($startL - $endL, 2);
+            }
+
+            // Endpoint 2: /rest/fuel/consumed/:registration (CAN Bus sensor)
+            // Response: {"data":{"total_consumed":Z}}
+            $response = Http::timeout($timeout)
+                ->withoutVerifying()
+                ->acceptJson()
+                ->withBasicAuth(...$auth)
+                ->get("{$baseUrl}/rest/fuel/consumed/{$reg}", [
+                    'start_timestamp' => $start,
+                    'end_timestamp'   => $end,
+                ]);
+
+            if ($response->successful()) {
+                $data = $response->json('data') ?? [];
+                $fuel = (float) ($data['total_consumed'] ?? $data['fuel_canbus_consumed'] ?? 0);
+                if ($fuel > 0) return round($fuel, 2);
+            }
+
+            return 0.0;
+        } catch (\Throwable) {
+            return 0.0;
+        }
     }
 
-    // Aggregate per registration (sudah ada method ini)
-    $report = $this->aggregateTripReport($trips);
+    public function syncDailyMetrics(string $date): array
+    {
+        $payload = $this->fetchTripsByDate($date);
+        $trips   = $payload['trips'];
 
-    // Ambil semua unit yang dimonitor, index by registration
-    $unitMap = \App\Models\FleetUnit::where('is_monitored', true)
-        ->whereNotNull('registration')
-        ->get()
-        ->keyBy('registration');
-
-    $synced  = 0;
-    $skipped = 0;
-
-    foreach ($report as $row) {
-        $registration = $row['registration'];
-
-        // Skip jika registration tidak ada di master unit
-        if (!isset($unitMap[$registration])) {
-            $skipped++;
-            continue;
+        if (empty($trips)) {
+            return ['synced' => 0, 'skipped' => 0, 'message' => 'Tidak ada trip data.'];
         }
 
-        $unit = $unitMap[$registration];
+        $report = $this->aggregateTripReport($trips);
 
-   \App\Models\FleetUnitDailyMetric::updateOrCreate(
-    [
-        'unit_code'   => $unit->unit_code,
-        'report_date' => $date,
-    ],
-    [
-        'idle_hours'       => round($row['total_idle_min'] / 60, 2),
-        'distance_km'      => $row['distance_km'],
-        'ua_percent'       => $row['utilization_ratio'],
-        'standby_hours'    => round(($row['total_engine_on_min'] - $row['total_driving_min']) / 60, 2),
-        'fuel_consumption' => 0,
-        'hm_start'         => null,
-        'hm_end'           => null,
-        'hm_usage'         => null,
-        'notes'            => 'Auto sync dari Cartrack',
-    ]
-);
+        $unitMap = \App\Models\FleetUnit::where('is_monitored', true)
+            ->whereNotNull('registration')
+            ->get()
+            ->keyBy('registration');
 
-        $synced++;
+        $synced  = 0;
+        $skipped = 0;
+
+        foreach ($report as $row) {
+            $registration = $row['registration'];
+
+            if (!isset($unitMap[$registration])) {
+                $skipped++;
+                continue;
+            }
+
+            $unit    = $unitMap[$registration];
+            $hmUsage = round($row['total_engine_on_min'] / 60, 2);
+
+            // HM Awal = HM Akhir hari sebelumnya, atau initial_hm dari master unit jika belum ada data
+            $prevMetric = \App\Models\FleetUnitDailyMetric::where('unit_code', $unit->unit_code)
+                ->where('report_date', '<', $date)
+                ->orderByDesc('report_date')
+                ->first();
+
+            if ($prevMetric?->hm_end !== null) {
+                $hmStart = (float) $prevMetric->hm_end;
+            } elseif ((float) $unit->initial_hm > 0) {
+                $hmStart = (float) $unit->initial_hm;
+            } else {
+                $hmStart = null;
+            }
+
+            $hmEnd = $hmStart !== null ? round($hmStart + $hmUsage, 2) : null;
+
+            // Fuel: dari field trip, fallback ke endpoint fuel
+            $fuelFromTrip = (float) ($row['fuel_consumption'] ?? 0);
+            $fuel = $fuelFromTrip > 0
+                ? $fuelFromTrip
+                : $this->fetchFuelByRegistration($registration, $date);
+
+            \App\Models\FleetUnitDailyMetric::updateOrCreate(
+                [
+                    'unit_code'   => $unit->unit_code,
+                    'report_date' => $date,
+                ],
+                [
+                    'idle_hours'       => round($row['total_idle_min'] / 60, 2),
+                    'distance_km'      => $row['distance_km'],
+                    'ua_percent'       => $row['utilization_ratio'],
+                    'standby_hours'    => round(($row['total_engine_on_min'] - $row['total_driving_min']) / 60, 2),
+                    'fuel_consumption' => round($fuel, 2),
+                    'hm_start'         => $hmStart,
+                    'hm_end'           => $hmEnd,
+                    'hm_usage'         => $hmUsage,
+                    'notes'            => 'Auto sync dari Cartrack',
+                ]
+            );
+
+            $synced++;
+        }
+
+        return [
+            'synced'  => $synced,
+            'skipped' => $skipped,
+            'message' => "Sync selesai: $synced unit tersync, $skipped tidak ditemukan di master unit.",
+        ];
     }
-
-    return [
-        'synced'  => $synced,
-        'skipped' => $skipped,
-        'message' => "Sync selesai: $synced unit tersync, $skipped tidak ditemukan di master unit.",
-    ];
-}
 
     protected function avg(array $rows, string $key): float
     {

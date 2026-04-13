@@ -30,18 +30,20 @@ class FleetVehicleDailyStat extends Model
         'safety_score',
         'performance_score',
         'status',
+        'fuel_consumption',
     ];
 
     protected $casts = [
-        'report_date' => 'date',
-        'distance_km' => 'decimal:2',
+        'report_date'         => 'date',
+        'distance_km'         => 'decimal:2',
         'total_engine_on_min' => 'decimal:2',
-        'total_driving_min' => 'decimal:2',
-        'total_idle_min' => 'decimal:2',
-        'idle_ratio' => 'decimal:2',
-        'utilization_ratio' => 'decimal:2',
-        'pa_score' => 'decimal:2',
-        'safety_score' => 'decimal:2',
-        'performance_score' => 'decimal:2',
+        'total_driving_min'   => 'decimal:2',
+        'total_idle_min'      => 'decimal:2',
+        'idle_ratio'          => 'decimal:2',
+        'utilization_ratio'   => 'decimal:2',
+        'pa_score'            => 'decimal:2',
+        'safety_score'        => 'decimal:2',
+        'performance_score'   => 'decimal:2',
+        'fuel_consumption'    => 'decimal:2',
     ];
 }

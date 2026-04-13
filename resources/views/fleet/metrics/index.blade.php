@@ -52,20 +52,20 @@
                 <h3 class="card-title font-weight-bold">Data Metrik ({{ $metrics->total() }} record)</h3>
             </div>
             <div class="card-body p-0">
-                <div class="table-responsive">
+                <div class="table-responsive" style="max-height: 65vh; overflow-y: auto;">
                     <table class="table table-hover mb-0 text-nowrap">
-                        <thead>
+                        <thead class="thead-freeze">
                             <tr>
                                 <th>Tanggal</th>
                                 <th>Unit Code</th>
                                 <th>Vendor</th>
-                                <th>Idle (Jam)</th>
+                                <th>Idle</th>
                                 <th>HM Awal</th>
                                 <th>HM Akhir</th>
                                 <th>HM Usage</th>
                                 <th>Jarak (KM)</th>
                                 <th>UA (%)</th>
-                                <th>Standby (Jam)</th>
+                                <th>Standby</th>
                                 <th>Fuel (Liter)</th>
                                 <th>Catatan</th>
                                 <th>Aksi</th>
@@ -77,7 +77,16 @@
                                 <td>{{ $m->report_date?->format('Y-m-d') }}</td>
                                 <td><strong>{{ $m->unit_code }}</strong></td>
                                 <td>{{ $m->unit?->vendor ?? '-' }}</td>
-                                <td>{{ number_format($m->idle_hours, 2) }}</td>
+                                <td>
+                                    @php $idleH = (float)$m->idle_hours; @endphp
+                                    @if($idleH >= 1)
+                                        {{ number_format($idleH, 1) }} jam
+                                    @elseif($idleH > 0)
+                                        {{ number_format($idleH * 60, 0) }} mnt
+                                    @else
+                                        <span class="text-muted">-</span>
+                                    @endif
+                                </td>
                                 <td>{{ $m->hm_start !== null ? number_format($m->hm_start, 1) : '-' }}</td>
                                 <td>{{ $m->hm_end !== null ? number_format($m->hm_end, 1) : '-' }}</td>
                                 <td>
@@ -94,7 +103,16 @@
                                         {{ number_format($ua, 1) }}%
                                     </span>
                                 </td>
-                                <td>{{ number_format($m->standby_hours, 2) }}</td>
+                                <td>
+                                    @php $sbH = (float)$m->standby_hours; @endphp
+                                    @if($sbH >= 1)
+                                        {{ number_format($sbH, 1) }} jam
+                                    @elseif($sbH > 0)
+                                        {{ number_format($sbH * 60, 0) }} mnt
+                                    @else
+                                        <span class="text-muted">-</span>
+                                    @endif
+                                </td>
                                 <td>{{ number_format($m->fuel_consumption, 2) }}</td>
                                 <td>{{ $m->notes ? \Str::limit($m->notes, 30) : '-' }}</td>
                                 <td class="text-nowrap">
@@ -117,10 +135,29 @@
                     </table>
                 </div>
             </div>
-            <div class="card-footer bg-white">
+            <div class="card-footer bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div class="text-muted small">
+                    Menampilkan {{ $metrics->firstItem() }}–{{ $metrics->lastItem() }} dari {{ number_format($metrics->total()) }} record
+                </div>
                 {{ $metrics->links() }}
             </div>
         </div>
     </div>
 </section>
+
+@push('styles')
+<style>
+    .thead-freeze th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: #f4f6f9;
+        border-bottom: 2px solid #dee2e6;
+        white-space: nowrap;
+    }
+    .table-responsive::-webkit-scrollbar { height: 6px; width: 6px; }
+    .table-responsive::-webkit-scrollbar-track { background: #f1f1f1; }
+    .table-responsive::-webkit-scrollbar-thumb { background: #adb5bd; border-radius: 3px; }
+</style>
+@endpush
 @endsection

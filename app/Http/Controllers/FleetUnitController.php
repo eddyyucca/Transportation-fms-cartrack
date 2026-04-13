@@ -45,11 +45,12 @@ class FleetUnitController extends Controller
         $data = $request->validate([
             'unit_code'    => 'required|string|max:50|unique:fleet_units,unit_code',
             'vendor'       => 'nullable|string|max:100',
-            'department'   => 'nullable|string|max=200',
+            'department'   => 'nullable|string|max:200',
             'brand'        => 'nullable|string|max:100',
             'type_model'   => 'nullable|string|max:100',
             'registration' => 'nullable|string|max:50',
             'is_monitored' => 'boolean',
+            'initial_hm'   => 'nullable|numeric|min:0',
         ]);
 
         $data['is_monitored'] = $request->boolean('is_monitored');
@@ -73,6 +74,7 @@ class FleetUnitController extends Controller
             'type_model'   => 'nullable|string|max:100',
             'registration' => 'nullable|string|max:50',
             'is_monitored' => 'boolean',
+            'initial_hm'   => 'nullable|numeric|min:0',
         ]);
 
         $data['is_monitored'] = $request->boolean('is_monitored');

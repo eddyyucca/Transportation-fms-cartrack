@@ -48,6 +48,13 @@
                             <label class="font-weight-bold">Departemen</label>
                             <input type="text" name="department" class="form-control" value="{{ old('department', $unit?->department) }}" placeholder="Mine Operation">
                         </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="font-weight-bold">HM Awal (Initial Hour Meter)</label>
+                            <input type="number" step="0.01" min="0" name="initial_hm" class="form-control"
+                                value="{{ old('initial_hm', $unit?->initial_hm ?? 0) }}"
+                                placeholder="0.00">
+                            <small class="text-muted">Titik awal akumulasi HM. Isi dengan nilai HM saat mulai tracking.</small>
+                        </div>
                         <div class="col-md-12 mb-3">
                             <div class="custom-control custom-switch">
                                 <input type="hidden" name="is_monitored" value="0">

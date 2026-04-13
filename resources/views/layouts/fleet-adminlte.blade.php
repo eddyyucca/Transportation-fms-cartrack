@@ -97,7 +97,7 @@
 
     <aside class="main-sidebar elevation-4">
         <a href="{{ route('fleet.dashboard') }}" class="brand-link text-center">
-            <span class="brand-text"><i class="fas fa-truck-moving mr-1"></i> Fleet SCM</span>
+            <span class="brand-text">Fleet SCM</span>
         </a>
 
         <div class="sidebar pt-3">

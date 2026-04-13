@@ -19,10 +19,12 @@ class FleetUnit extends Model
         'type_model',
         'registration',
         'is_monitored',
+        'initial_hm',
     ];
 
     protected $casts = [
         'is_monitored' => 'boolean',
+        'initial_hm'   => 'decimal:2',
     ];
 
     public function metrics()
