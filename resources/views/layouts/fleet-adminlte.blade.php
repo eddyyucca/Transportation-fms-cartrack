@@ -128,7 +128,7 @@
 
                     <li class="nav-header">MAINTENANCE</li>
                     <li class="nav-item">
-                        <a href="{{ route('fleet.pm.index') }}" class="nav-link {{ request()->routeIs('fleet.pm*') ? 'active' : '' }}">
+                        <a href="{{ route('fleet.pm.index') }}" class="nav-link {{ request()->routeIs('fleet.pm.index', 'fleet.pm.create', 'fleet.pm.edit') ? 'active' : '' }}">
                             <i class="nav-icon fas fa-tools"></i>
                             <p>PM Schedule</p>
                             @php $overdueCount = \App\Models\PmSchedule::where('status','overdue')->count(); @endphp
@@ -136,6 +136,35 @@
                                 <span class="badge badge-danger right">{{ $overdueCount }}</span>
                             @endif
                         </a>
+                    </li>
+                    <li class="nav-item has-treeview {{ request()->routeIs('fleet.pm-reports*', 'fleet.bus-lv-reports*', 'fleet.p2h*') ? 'menu-open' : '' }}">
+                        <a href="#" class="nav-link {{ request()->routeIs('fleet.pm-reports*', 'fleet.bus-lv-reports*', 'fleet.p2h*') ? 'active' : '' }}">
+                            <i class="nav-icon fas fa-chart-bar"></i>
+                            <p>
+                                Report Weekly
+                                <i class="right fas fa-angle-left"></i>
+                            </p>
+                        </a>
+                        <ul class="nav nav-treeview">
+                            <li class="nav-item">
+                                <a href="{{ route('fleet.pm-reports.index') }}" class="nav-link {{ request()->routeIs('fleet.pm-reports*') ? 'active' : '' }}">
+                                    <i class="far fa-circle nav-icon"></i>
+                                    <p>PM Check</p>
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{{ route('fleet.bus-lv-reports.index') }}" class="nav-link {{ request()->routeIs('fleet.bus-lv-reports*') ? 'active' : '' }}">
+                                    <i class="far fa-circle nav-icon"></i>
+                                    <p>Bus & LV</p>
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{{ route('fleet.p2h.index') }}" class="nav-link {{ request()->routeIs('fleet.p2h.index', 'fleet.p2h.dashboard', 'fleet.p2h.daily.*', 'fleet.p2h.units.*') ? 'active' : '' }}">
+                                    <i class="far fa-circle nav-icon"></i>
+                                    <p>P2H Online</p>
+                                </a>
+                            </li>
+                        </ul>
                     </li>
 
                 </ul>

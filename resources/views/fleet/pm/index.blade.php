@@ -9,6 +9,9 @@
                 <div class="text-muted">Jadwal preventive maintenance bi-weekly dengan notifikasi WhatsApp.</div>
             </div>
             <div class="d-flex gap-2 flex-wrap">
+                <a href="{{ route('fleet.pm-reports.index') }}" class="btn btn-outline-dark">
+                    <i class="fas fa-clipboard-list mr-1"></i> Report PM Check
+                </a>
                 @if($overdueCount > 0)
                 <form method="POST" action="{{ route('fleet.pm.overdue-notif') }}">
                     @csrf

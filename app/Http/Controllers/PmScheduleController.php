@@ -6,6 +6,7 @@ use App\Models\FleetUnit;
 use App\Models\PmSchedule;
 use App\Services\FleetWhatsappService;
 use Carbon\Carbon;
+use Carbon\CarbonPeriod;
 use Illuminate\Http\Request;
 
 class PmScheduleController extends Controller
@@ -38,6 +39,108 @@ class PmScheduleController extends Controller
     {
         $units = FleetUnit::where('is_monitored', true)->orderBy('unit_code')->get();
         return view('fleet.pm.form', ['schedule' => null, 'units' => $units]);
+    }
+
+    public function report(Request $request)
+    {
+        PmSchedule::refreshStatuses();
+
+        $selectedMonth = $request->get('month');
+        if (!$selectedMonth) {
+            $latestDate = PmSchedule::query()
+                ->selectRaw('MAX(COALESCE(completed_date, scheduled_date)) as latest_date')
+                ->value('latest_date');
+
+            $selectedMonth = Carbon::parse($latestDate ?: now())->format('Y-m');
+        }
+
+        $startDate = Carbon::createFromFormat('Y-m', $selectedMonth)->startOfMonth();
+        $endDate = $startDate->copy()->endOfMonth();
+
+        $records = PmSchedule::with('unit')
+            ->where(function ($query) use ($startDate, $endDate) {
+                $query->whereBetween('scheduled_date', [$startDate->toDateString(), $endDate->toDateString()])
+                    ->orWhereBetween('completed_date', [$startDate->toDateString(), $endDate->toDateString()]);
+            })
+            ->orderBy('scheduled_date')
+            ->orderBy('unit_code')
+            ->get();
+
+        $days = collect(CarbonPeriod::create($startDate, $endDate))
+            ->map(fn (Carbon $date) => $date->copy())
+            ->values();
+
+        $dailyStats = $days->map(function (Carbon $date) use ($records) {
+            $dateString = $date->toDateString();
+            $target = $records->filter(fn (PmSchedule $pm) => optional($pm->scheduled_date)->toDateString() === $dateString)->count();
+            $actual = $records->filter(function (PmSchedule $pm) use ($dateString) {
+                if ($pm->status !== 'done') {
+                    return false;
+                }
+
+                $actualDate = $pm->completed_date ?: $pm->scheduled_date;
+
+                return optional($actualDate)->toDateString() === $dateString;
+            })->count();
+
+            return (object) [
+                'date' => $date,
+                'label' => $date->day,
+                'target' => $target,
+                'actual' => $actual,
+                'achievement' => $target > 0 ? round($actual / $target, 4) : null,
+            ];
+        });
+
+        $weeklyStats = $dailyStats
+            ->groupBy(fn ($day) => $day->date->isoWeek())
+            ->map(function ($items, $weekNumber) {
+                $plan = $items->sum('target');
+                $actual = $items->sum('actual');
+                $achievement = $plan > 0 ? round($actual / $plan, 4) : null;
+
+                return (object) [
+                    'week_label' => 'W' . $weekNumber,
+                    'plan' => $plan,
+                    'actual' => $actual,
+                    'achievement' => $achievement,
+                    'deviation' => $achievement !== null ? round(max(0, 1 - $achievement), 4) : null,
+                ];
+            })
+            ->values();
+
+        $monthOptions = PmSchedule::query()
+            ->selectRaw("DATE_FORMAT(scheduled_date, '%Y-%m') as month_key")
+            ->whereNotNull('scheduled_date')
+            ->groupBy('month_key')
+            ->orderByDesc('month_key')
+            ->pluck('month_key');
+
+        if (!$monthOptions->contains($selectedMonth)) {
+            $monthOptions = $monthOptions->prepend($selectedMonth)->unique()->values();
+        }
+
+        $summary = (object) [
+            'target' => $dailyStats->sum('target'),
+            'actual' => $dailyStats->sum('actual'),
+            'achievement' => $dailyStats->sum('target') > 0
+                ? round($dailyStats->sum('actual') / $dailyStats->sum('target'), 4)
+                : null,
+            'done' => $records->where('status', 'done')->count(),
+            'overdue' => $records->where('status', 'overdue')->count(),
+            'scheduled' => $records->where('status', 'scheduled')->count(),
+        ];
+
+        return view('fleet.pm.report', [
+            'selectedDate' => $endDate->toDateString(),
+            'selectedMonth' => $selectedMonth,
+            'monthOptions' => $monthOptions,
+            'periodLabel' => $startDate->translatedFormat('F Y'),
+            'dailyStats' => $dailyStats,
+            'weeklyStats' => $weeklyStats,
+            'summary' => $summary,
+            'records' => $records,
+        ]);
     }
 
     public function store(Request $request)
